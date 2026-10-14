@@ -1,12 +1,13 @@
 name: Windows
 
 # Builds the Windows app and publishes the installer.
-# Triggered by tags like `windows-v0.1.0`; the macOS workflows are untouched.
+# Triggered by `windows-v*` tags or fork tags such as `0.4.1.f`.
 
 on:
   push:
     tags:
       - 'windows-v*'
+      - '*.f'
   workflow_dispatch:
 
 permissions:
@@ -32,7 +33,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: windows/package-lock.json
 
@@ -53,19 +54,14 @@ jobs:
       # "0.1.1" that installs a 0.1.0 is the kind of thing nobody notices until
       # a bug report arrives against the wrong build.
       - name: Check the tag and every version agree
-        if: startsWith(github.ref, 'refs/tags/windows-v')
+        if: github.ref_type == 'tag'
         shell: pwsh
-        run: |
-          $tag  = "${{ github.ref_name }}" -replace '^windows-v', ''
-          $conf = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          $pkg  = (Get-Content package.json | ConvertFrom-Json).version
-          $cargo = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.+)"').Matches[0].Groups[1].Value
-          "tag=$tag tauri.conf=$conf package.json=$pkg Cargo.toml=$cargo"
-          $bad = @()
-          if ($tag -ne $conf)  { $bad += "tauri.conf.json says $conf" }
-          if ($tag -ne $pkg)   { $bad += "package.json says $pkg" }
-          if ($tag -ne $cargo) { $bad += "Cargo.toml says $cargo" }
-          if ($bad) { throw "tag says $tag but $($bad -join '; ')" }
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/check-release-version.mjs $env:RELEASE_TAG
+
+      - name: Island tests
+        run: npm test
 
       # `npm run build` (run by tauri as beforeBuildCommand) builds coucou-hook
       # first, which tauri.conf.json then bundles as a resource. `pack` then
@@ -75,7 +71,13 @@ jobs:
         shell: pwsh
         run: |
           npm run pack
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          Compress-Archive -Path target/release/coucou.exe, target/release/coucou-hook.exe -DestinationPath "release/Coucou-Windows-$version-portable.zip"
+          Get-ChildItem "release/Coucou-Windows-$version*" | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content release/SHA256SUMS -Encoding utf8
           "version=$version" >> $env:GITHUB_OUTPUT
           Get-ChildItem release | Format-Table Name, Length
 
@@ -113,29 +115,46 @@ jobs:
           retention-days: 3
 
       - name: Publish the release
-        if: env.PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/windows-v')
+        if: env.PUBLISH == 'true' && github.ref_type == 'tag'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           $v = "${{ steps.pack.outputs.version }}"
+          $displayVersion = $v
+          $latest = "--latest=false"
+          if ($env:RELEASE_TAG.EndsWith(".f")) {
+            $displayVersion = $env:RELEASE_TAG
+            $latest = "--latest"
+          }
           $notes = @"
-          Coucou for Windows $v — Mochi at the top of your screen.
+          Coucou for Windows $displayVersion — falearn's build.
+
+          - Among Us and Verity skins, assignable independently to each agent.
+          - Claude Code labels and the selected agent's skin in the compact panel.
+          - Linux source fixes for Codex terminal focus, X11 rendering and cursor tracking.
 
           Download ``Coucou-Windows-$v.msi`` (Windows Installer) or ``Coucou-Windows-$v-setup.exe`` and run it. The installer is not
           code-signed yet, so Windows SmartScreen shows a warning: click
           **More info → Run anyway**.
+
+          The portable ZIP contains both ``coucou.exe`` and ``coucou-hook.exe``. Keep them together.
+          SHA-256 checksums are in ``SHA256SUMS``.
           "@
           # --latest=false is not cosmetic: without it GitHub hands "Latest" to
           # whichever release was published last, and the site's Download for Mac
           # button points at /releases/latest. A Windows tag would silently send
           # Mac users to the .exe. The macOS `v*` releases own that slot.
-          gh release create "${{ github.ref_name }}" `
+          # The fork's *.f releases explicitly own Latest in the fork instead.
+          gh release create $env:RELEASE_TAG `
             "release/Coucou-Windows-$v-setup.exe" `
             "release/Coucou-Windows-$v.msi" `
-            --title "Coucou for Windows $v" `
+            "release/Coucou-Windows-$v-portable.zip" `
+            "release/SHA256SUMS" `
+            --title "Coucou for Windows $displayVersion" `
             --notes $notes `
-            --latest=false
+            $latest
 
       - name: Update the rolling windows-latest release
         if: env.PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/windows-v')

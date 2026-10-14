@@ -21,9 +21,13 @@ Approve Claude Code permissions, watch your session work, drop a file, chat with
 
 ## Install
 
-Download **[Coucou-Windows.msi](https://github.com/Louis-CFM/coucou/releases/download/windows-latest/Coucou-Windows.msi)**
-(Windows Installer) or **[Coucou-Windows-setup.exe](https://github.com/Louis-CFM/coucou/releases/download/windows-latest/Coucou-Windows-setup.exe)**,
-always the newest version, and run it. The .exe installs for the current user only, with no admin prompt; the .msi may ask for admin rights.
+This fork's **[0.4.1.f release](https://github.com/falearn228/coucou-but-better/releases/tag/0.4.1.f)** includes:
+
+- **[MSI installer](https://github.com/falearn228/coucou-but-better/releases/download/0.4.1.f/Coucou-Windows-0.4.1-f.msi)**
+- **[Setup EXE](https://github.com/falearn228/coucou-but-better/releases/download/0.4.1.f/Coucou-Windows-0.4.1-f-setup.exe)**
+- **[Portable ZIP](https://github.com/falearn228/coucou-but-better/releases/download/0.4.1.f/Coucou-Windows-0.4.1-f-portable.zip)** — unpack and keep `coucou.exe` and `coucou-hook.exe` together.
+
+The .exe installs for the current user only, with no admin prompt; the .msi may ask for admin rights. Checksums are in the release's `SHA256SUMS` file.
 
 **Windows will show a warning the first time — that's expected.** The installer isn't code-signed yet, so SmartScreen doesn't know the publisher:
 
@@ -282,16 +286,20 @@ is off or Coucou is paused.
 
 ## Build it yourself
 
-You need [Rust](https://rustup.rs), [Node 20+](https://nodejs.org), and the
+You need [Rust](https://rustup.rs) (the MSVC toolchain), [Node 24](https://nodejs.org), and the
 **MSVC build tools** (Visual Studio Build Tools with "Desktop development with
 C++"). WebView2 ships with Windows 10/11.
 
 ```powershell
+git clone --branch 0.4.1.f https://github.com/falearn228/coucou-but-better.git
+cd coucou-but-better
 cd windows
-npm install
-npm run tauri dev      # live-reloading development build
+npm ci
+node scripts/check-release-version.mjs 0.4.1.f
 npm run pack           # builds the installer and drops it in windows/release/
 ```
+
+For a live-reloading development build, use `npm run tauri dev` instead of `npm run pack`.
 
 `npm run dev` alone serves the front end in an ordinary browser, which is enough
 to work on the island's looks. It also serves `dev/upload-preview.html`, which
@@ -300,12 +308,14 @@ otherwise needs a real drag from Explorer to see — and `dev/recap-preview.html
 the weekly recap card and its shared image on a sample week. None of these pages
 ships in the app.
 
-`npm run pack` leaves two files in `windows/release/`, the same names the release
+`npm run pack` leaves four files in `windows/release/`, the same installer names the release
 workflow publishes:
 
 ```
 Coucou-Windows-X.Y.Z-setup.exe    the versioned installer
 Coucou-Windows-setup.exe          the same file under the rolling name
+Coucou-Windows-X.Y.Z.msi          the versioned Windows Installer package
+Coucou-Windows.msi                the same MSI under the rolling name
 ```
 
 Installing is optional — `target/release/coucou.exe` runs on its own. There is no

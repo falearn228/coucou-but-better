@@ -4,6 +4,13 @@
 
 - **Flow dictation** *(macOS, GitHub build)* — hold a key anywhere on the Mac (right ⌥ by default, or right ⌘, right ⌃ or fn), speak, let go: your words are pasted where you type, like Wispr Flow. A small pill rests at the bottom of the screen while Flow dictation is on; when you speak it opens into Mochi and nine dots rising and falling with the graves and the aigus of your voice. Two quick taps keep it listening hands-free until the next tap; Esc cancels. Speech is recognised by the Mac (on-device when it can), and the clipboard gets back what it held after the paste. Off by default — Settings → Voice; it needs the Accessibility permission to see the key and paste
 
+## Windows 0.4.1.f — October 14, 2026
+
+- **Per-agent outfits**: choose each Mochi's skin independently in the wardrobe, or right-click its small agent pill. Includes rounded Among Us and Verity skins.
+- **Claude Code labels**: Claude Code sessions and idle cards show their own name instead of VS Code. The compact panel keeps the selected agent's outfit.
+- **Linux source fixes**: Codex's Open terminal finds the existing interactive terminal instead of opening VS Code. X11 uses WebKit's DMA-BUF fallback and native pointer coordinates to avoid stale Mochi layers and missed gaze updates.
+- **Windows packages**: MSI, setup EXE and a portable ZIP with both executables, built and published from tag `0.4.1.f`. Build manifests use SemVer `0.4.1-f`; MSI uses `0.4.1.0`.
+
 ## Android 0.2.0 — October 13, 2026
 
 - **Home-screen widgets** — nine to pick from, each with a real preview in the widget picker: Mochi at a glance, Mochi's mood, Approvals waiting, Finished today, Plan usage, a one-line status with four buttons, all your agents, Mochi big (Mochi, plan usage and six buttons), and the agents summary, now on the same card. The colour follows your most urgent agent: orange when something waits for you, blue while it works, green when it's done, grey when the computer isn't there. Plan usage has its own colours (teal, yellow from 75 %, red from 90 %, with the time it resets). Read-only: the buttons only open a screen of the app, and a request is always decided in the app, behind your fingerprint. No background refresh: they redraw when something changes, plus once at midnight so Finished today starts again at zero, and that count stays on the phone (#620 by @Rhytam23)
