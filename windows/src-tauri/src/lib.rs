@@ -209,6 +209,21 @@ fn open_url(url: String) {
 /// and falls back to the file manager otherwise.
 #[tauri::command]
 fn open_in_vscode(path: Option<String>) -> bool {
+    open_in_editor(path, None)
+}
+
+/// Fixed launcher names only; an IPC argument is never an executable path.
+fn editor_launchers(editor: Option<&str>) -> Option<&'static [&'static str]> {
+    match editor {
+        Some("zed") => Some(&["zed", "zeditor"]),
+        None | Some("code") => Some(&["code"]),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+fn open_in_editor(path: Option<String>, editor: Option<String>) -> bool {
+    let Some(launchers) = editor_launchers(editor.as_deref()) else { return false };
     // No shell anywhere near this. The path is a project folder chosen by
     // whoever is using Claude Code, and a shell would happily read `&`, `^`, `%`
     // or `$` in a folder name as syntax. Finding the launcher ourselves and
@@ -223,8 +238,9 @@ fn open_in_vscode(path: Option<String>) -> bool {
             return false;
         }
     }
-    if let Some(code) = platform::find_on_path("code") {
-        let mut cmd = Command::new(code);
+    for launcher in launchers {
+        let Some(executable) = platform::find_on_path(launcher) else { continue };
+        let mut cmd = Command::new(executable);
         if let Some(p) = path.as_deref() {
             cmd.arg(p);
         }
@@ -240,9 +256,10 @@ fn open_in_vscode(path: Option<String>) -> bool {
 
 /// "Open terminal": brings forward the terminal or editor window the session
 /// runs in (see session_window.rs). Linux also handles Codex's detached server;
-/// a missing or ambiguous terminal is logged instead of opening another app.
+/// Zed sessions fall back to their project in Zed; other missing terminals are logged.
 #[tauri::command]
-fn open_session(session_id: Option<String>, path: Option<String>) -> bool {
+fn open_session(session_id: Option<String>, path: Option<String>, editor: Option<String>) -> bool {
+    if editor_launchers(editor.as_deref()).is_none() { return false; }
     #[cfg(target_os = "linux")]
     let codex = session_id.as_deref().is_some_and(session_window::is_codex);
     let owners = session_id
@@ -259,7 +276,7 @@ fn open_session(session_id: Option<String>, path: Option<String>) -> bool {
         if platform::focus_session_window(&owners, &folder) {
             return true;
         }
-        open_in_vscode(path)
+        open_in_editor(path, editor)
     }
     // Linux asks the display server, KWin or the terminal, which can take a
     // moment: never on the UI thread a sync command runs on.
@@ -269,7 +286,11 @@ fn open_session(session_id: Option<String>, path: Option<String>) -> bool {
             if !platform::focus_session_window(&owners, &folder)
                 && !(codex && platform::focus_codex_terminal(path.as_deref()))
             {
-                log::line(format!("open terminal: no unambiguous session window found (codex={codex})"));
+                if editor.as_deref() == Some("zed") {
+                    open_in_editor(path, editor);
+                } else {
+                    log::line(format!("open terminal: no unambiguous session window found (codex={codex})"));
+                }
             }
         });
         true
@@ -296,9 +317,17 @@ fn diff_file(path: &str) -> Option<&std::path::Path> {
 /// xdg-open or Explorer would run a script that Claude just wrote.
 #[tauri::command]
 fn open_file_in_vscode(path: String) -> bool {
+    open_file_in_editor(path, None)
+}
+
+/// Opens a diff file in the session editor, or reveals its containing folder.
+#[tauri::command]
+fn open_file_in_editor(path: String, editor: Option<String>) -> bool {
+    let Some(launchers) = editor_launchers(editor.as_deref()) else { return false };
     let Some(file) = diff_file(&path) else { return false };
-    if let Some(code) = platform::find_on_path("code") {
-        let mut cmd = Command::new(code);
+    for launcher in launchers {
+        let Some(executable) = platform::find_on_path(launcher) else { continue };
+        let mut cmd = Command::new(executable);
         cmd.arg(file);
         if platform::no_console(&mut cmd).spawn().is_ok() {
             return true;
@@ -698,9 +727,11 @@ pub fn run() {
             list_monitors,
             open_url,
             open_in_vscode,
+            open_in_editor,
             open_session,
             open_claude_desktop,
             open_file_in_vscode,
+            open_file_in_editor,
             quit_app,
             hooks_status,
             agent_hooks_status,
@@ -839,7 +870,17 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::diff_file;
+    use super::{diff_file, editor_launchers};
+
+    #[test]
+    fn only_supported_editor_launchers_are_allowed() {
+        assert_eq!(editor_launchers(None), Some(&["code"][..]));
+        assert_eq!(editor_launchers(Some("code")), Some(&["code"][..]));
+        assert_eq!(editor_launchers(Some("zed")), Some(&["zed", "zeditor"][..]));
+        for editor in ["", "powershell", "--help", "C:/tools/custom.exe"] {
+            assert!(editor_launchers(Some(editor)).is_none());
+        }
+    }
 
     #[test]
     fn only_an_existing_file_by_its_full_path_reaches_the_editor() {

@@ -415,7 +415,7 @@ test("the terminal shortcut is the existing Open terminal (the session's window)
   State.tasks[0].sessionCwd = "C:\\work\\proj";
   State.mode = "expanded";
   runGlobalShortcut(host, "jumpToTerminal", resume);
-  assert.deepEqual(sent("open_session"), [{ sessionId: null, path: "C:\\work\\proj" }]);
+  assert.deepEqual(sent("open_session"), [{ sessionId: null, path: "C:\\work\\proj", editor: "code" }]);
   assert.deepEqual(did, ["collapse"]);
 
   // A Claude Desktop session lives in the Claude app.
@@ -540,4 +540,12 @@ test("island keys: the highlight walks the list on screen, Ctrl+O opens it, Ctrl
   did = [];
   runIslandKey(host, { kind: "diff" });
   assert.deepEqual(did, ["view:toggleDiff"]);
+});
+
+
+test("the terminal shortcut carries Zed's session editor to Rust", () => {
+  State.upsertWorkspacePill("agent_zed", "proj", "/work/proj");
+  State.setFocus("agent_zed");
+  runGlobalShortcut(host, "jumpToTerminal", resume);
+  assert.deepEqual(sent("open_session"), [{ sessionId: null, path: "/work/proj", editor: "zed" }]);
 });

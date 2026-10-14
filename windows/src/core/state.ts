@@ -8,6 +8,7 @@ import {
 } from "./pills";
 import type { CodexPlanUsage, PlanUsage } from "./plan";
 import type { ProviderId } from "./providers";
+import type { Editor } from "./editors";
 import type { FileDiff } from "./diff";
 import type { Bindings } from "./shortcuts";
 import { DEFAULT_OUTFIT, type Outfit } from "../mochi/wardrobe";
@@ -37,6 +38,8 @@ export interface AgentTask {
   sessionCwd?: string | null;
   /** Claude Code's session, so "Open terminal" can find the window it runs in. */
   sessionId?: string | null;
+  /** Editor hosting this session, including an explicitly tagged external agent. */
+  sessionEditor?: Editor;
   /** Claude's final message after Stop, one line; cleared when a new turn starts. */
   finalLine?: string | null;
 }
@@ -106,7 +109,7 @@ export interface Settings {
   absenceInterval: number;
   /** Declared pills next to the main one (at most 4), in the order they were added. */
   activeIntegrations: string[];
-  /** The always-on workspace pill: VS Code, Cursor, Codex or Antigravity. */
+  /** The always-on workspace pill: Claude Code, Cursor, Zed, Codex or Antigravity. */
   mainPill: string;
   /** "primary", "cursor", or `at:<x>,<y>` for one display (logical origin). */
   screen: string;
@@ -473,7 +476,7 @@ class AppState {
   }
 
   /**
-   * The pill a Claude Code session belongs to (VS Code or Cursor). It is made
+   * The pill a Claude Code session belongs to (Claude Code, Cursor or Zed). It is made
    * for the session when it is neither the main pill nor declared, as
    * upsertWorkspaceTask does on macOS.
    */

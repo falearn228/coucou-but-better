@@ -230,10 +230,15 @@ fn agent_tag(arg: &str, env: &dyn Fn(&str) -> Option<String>) -> Option<String> 
         .then(|| "claude-desktop".to_string())
 }
 
-/// `cursor` when the session runs in Cursor's integrated terminal. Cursor sets
+/// Identifies Zed or Cursor when the session runs in an integrated terminal. Cursor sets
 /// TERM_PROGRAM=vscode like VS Code does, so it is told apart by its own trace
 /// variable, or by its executable behind VS Code's git helper.
 fn term_editor(env: &dyn Fn(&str) -> Option<String>) -> Option<&'static str> {
+    if env("TERM_PROGRAM").is_some_and(|v| v.eq_ignore_ascii_case("zed"))
+        || env("ZED_TERM").is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    {
+        return Some("zed");
+    }
     if env("CURSOR_TRACE_ID").is_some_and(|v| !v.is_empty()) {
         return Some("cursor");
     }
@@ -383,6 +388,16 @@ mod tests {
         assert_eq!(agent_tag("gemini", &desktop).as_deref(), Some("gemini"));
         assert_eq!(agent_tag("", &env_of(&[("CLAUDE_CODE_ENTRYPOINT", "cli")])), None);
         assert_eq!(agent_tag("", &env_of(&[])), None);
+    }
+
+    #[test]
+    fn zed_terminal_is_detected_without_mistaking_other_terminals() {
+        assert_eq!(term_editor(&env_of(&[("TERM_PROGRAM", "zed")])), Some("zed"));
+        assert_eq!(term_editor(&env_of(&[("TERM_PROGRAM", "Zed")])), Some("zed"));
+        assert_eq!(term_editor(&env_of(&[("ZED_TERM", "true")])), Some("zed"));
+        for value in ["", "false", "0"] {
+            assert_eq!(term_editor(&env_of(&[("ZED_TERM", value)])), None);
+        }
     }
 
     #[test]

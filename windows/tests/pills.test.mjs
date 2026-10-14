@@ -17,6 +17,7 @@ test("the catalog keeps the shared pill IDs and identifies Claude Code by its ag
   const mac = [
     ["integration_claude", "Claude Code", "#F5F6F8", "workspace", "Integration"],
     ["agent_cursor", "Cursor", "#C0C4CC", "workspace", "Integration"],
+    ["agent_zed", "Zed", "#A8B5C8", "workspace", "Integration"],
     ["agent_antigravity", "Antigravity", "#E879F9", "workspace", "Integration"],
     ["agent_codex", "Codex", "#2DD4BF", "workspace", "Integration"],
     ["agent_gemini", "Gemini CLI", "#8AB4F8", "agent", "Agent"],
@@ -131,13 +132,13 @@ test("no chat provider that works here says Coming soon", () => {
 
 test("the main pill is a workspace tool that works here", () => {
   assert.deepEqual(mainPillChoices("linux").map((p) => p.id), [
-    "integration_claude", "agent_cursor", "agent_antigravity", "agent_codex",
+    "integration_claude", "agent_cursor", "agent_zed", "agent_antigravity", "agent_codex",
   ]);
   assert.equal(DEFAULT_MAIN_PILL, "integration_claude");
 });
 
 test("hook-driven pills are the workspace tools and the agents with hooks", () => {
-  for (const id of ["integration_claude", "agent_cursor", "agent_codex", "agent_gemini", "agent_copilot", "agent_muse", "agent_antigravity", "agent_opencode", "agent_amp", "agent_hermes"]) {
+  for (const id of ["integration_claude", "agent_cursor", "agent_zed", "agent_codex", "agent_gemini", "agent_copilot", "agent_muse", "agent_antigravity", "agent_opencode", "agent_amp", "agent_hermes"]) {
     assert.ok(isHookPill(id), id);
   }
   for (const id of ["agent_claude-desktop", "ai_anthropic", "integration_stripe", "agent_unknown"]) {
@@ -148,6 +149,7 @@ test("hook-driven pills are the workspace tools and the agents with hooks", () =
 test("a live session names its tool next to the project", () => {
   assert.equal(sessionSubtitle("integration_claude"), "Claude Code");
   assert.equal(sessionSubtitle("agent_cursor"), "Cursor");
+  assert.equal(sessionSubtitle("agent_zed"), "Zed");
   assert.equal(sessionSubtitle("agent_claude-desktop"), "Claude Desktop");
   assert.equal(sessionSubtitle("agent_gemini"), "Agent");
   assert.equal(sessionSubtitle("agent_whatever"), "Agent");

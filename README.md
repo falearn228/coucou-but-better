@@ -12,6 +12,7 @@ I keep the fixes and ideas I want here, and may add more as I use it.
 |---|---|
 | Outfits for each agent | Assign skins independently to the main Mochi and the smaller agents. Right-click an agent pill or use the **Agent** selector in the wardrobe. |
 | Among Us and Verity | Two extra skins, adapted to Mochi's rounded shape, for both large and small characters. |
+| Zed integration | Select Zed as the main IDE, follow Claude Code sessions in its terminal, and open session files in Zed (Windows/Linux). |
 | Claude Code labels | Agent pills and idle cards show **Claude Code** instead of **VS Code**. |
 | Compact panel | The main character keeps the selected agent's skin when the panel is folded. |
 | Codex terminal focus on Linux | **Open terminal** looks for the running Codex terminal instead of falling back to VS Code. |

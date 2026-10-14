@@ -19,6 +19,7 @@ import {
 import { buildDiffCard } from "./diff";
 import { lastTextStep } from "../core/diff";
 import { Bridge } from "../core/bridge";
+import { editorForTask } from "../core/editors";
 import { buildRecap } from "./recap";
 import { buildWardrobe } from "./wardrobe";
 import { buildSpotifyCard, buildSpotifyPill, type SpotifyPillHost } from "./spotify";
@@ -321,7 +322,8 @@ export function buildOverview(actions: ViewActions): ViewHost {
         }
         plan.sync();
       } else if (task && diff) {
-        const key = `diff~${task.id}~${diff.id}`;
+        const editor = editorForTask(task, State.mainPillId);
+        const key = `diff~${task.id}~${diff.id}~${editor}`;
         if (key !== cardKey) {
           cardKey = key;
           mode = "diff";
@@ -331,7 +333,8 @@ export function buildOverview(actions: ViewActions): ViewHost {
               actions.blip();
               closeDiff();
             },
-            open: (path) => void Bridge.openFileInVSCode(path),
+            editor,
+            open: (path) => void Bridge.openFileInEditor(path, editor),
           }));
         }
       } else if (task && sessionActive) {

@@ -695,3 +695,32 @@ test("a declined permission request leaves the stop timer running", () => {
   assert.deepEqual(sent("approval_decline"), [{ requestId: "r1" }, { requestId: "r2" }]);
   assert.equal(task().state, "idle");
 });
+
+
+test("Claude Code in Zed gets a transient workspace pill and routes permissions there", () => {
+  hook({ hook_event_name: "SessionStart", term_editor: "zed", session_id: "zed-s", cwd: "/work/proj" });
+  assert.equal(task("agent_zed").sessionId, "zed-s");
+  assert.equal(task("agent_zed").sessionEditor, "zed");
+  assert.equal(task().state, "idle");
+  hook({ hook_event_name: "PermissionRequest", term_editor: "zed", session_id: "zed-s", cwd: "/work/proj", request_id: "zed-r", tool_name: "Bash" });
+  assert.equal(State.pendingApproval.pillId, "agent_zed");
+  assert.equal(State.focusId, "agent_zed");
+  assert.deepEqual(sent("approval_ack"), [{ requestId: "zed-r" }]);
+});
+
+test("an explicit agent inside Zed keeps its own pill and remembers the editor", () => {
+  hook({ hook_event_name: "SessionStart", coucou_agent: "codex", term_editor: "zed", session_id: "codex-s", cwd: "/work/proj" });
+  assert.equal(task("agent_codex").sessionEditor, "zed");
+  assert.equal(task("agent_codex").sessionId, "codex-s");
+  assert.equal(task("agent_zed"), undefined);
+});
+
+
+test("an ordinary terminal leaves file opening to the chosen main IDE", () => {
+  State.settings.mainPill = "agent_zed";
+  State.loadIntegrationTasks();
+  hook({ hook_event_name: "SessionStart", term_program: "ghostty", cwd: "/work/proj" });
+  assert.equal(task().sessionEditor, undefined);
+  hook({ hook_event_name: "SessionStart", term_program: "vscode", cwd: "/work/other" });
+  assert.equal(task().sessionEditor, "code");
+});

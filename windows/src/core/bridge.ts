@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Settings } from "./state";
+import type { Editor } from "./editors";
 import type { RecapHistory, RecapPrefs } from "../recap/summary";
 import type { SpotifyState } from "./spotify";
 
@@ -218,16 +219,19 @@ export const Bridge = {
 
   /**
    * "Open terminal": the window the session runs in when Rust found it
-   * (Windows; Linux on X11 and KDE Plasma), else the folder in VS Code.
+   * (Windows; Linux on X11 and KDE Plasma), with a folder fallback for Zed.
    */
-  openSession: (sessionId: string | null, path: string | null) =>
-    call<boolean>("open_session", { sessionId, path }),
+  openSession: (sessionId: string | null, path: string | null, editor?: Editor) =>
+    call<boolean>("open_session", { sessionId, path, ...(editor ? { editor } : {}) }),
 
   /** The Claude desktop app, for the Claude Desktop pill (Windows only). */
   openClaudeDesktop: () => call<boolean>("open_claude_desktop"),
 
   /** The diff card's ↗: an existing file, in VS Code; never launched by its type. */
   openFileInVSCode: (path: string) => call<boolean>("open_file_in_vscode", { path }),
+
+  /** Open an existing diff file in the session editor; never launched by its type. */
+  openFileInEditor: (path: string, editor: Editor) => call<boolean>("open_file_in_editor", { path, editor }),
 
   quit: () => call<void>("quit_app"),
 

@@ -7,6 +7,7 @@
 // island has the keyboard: it takes it for the chat, and when a global
 // shortcut opens it.
 
+import { editorForTask } from "../core/editors";
 import { Bridge, onEvent } from "../core/bridge";
 import type { BotEmoteName, IslandViewName } from "../core/layout";
 import { cyclePill, islandKeyAction, navigate, pillByNumber, type IslandKeyAction } from "../core/shortcuts";
@@ -94,7 +95,7 @@ export function runGlobalShortcut(host: ShortcutHost, action: string, resume: ()
     case "jumpToTerminal": {
       const task = State.focusTask;
       if (task?.id === CLAUDE_DESKTOP_ID) void Bridge.openClaudeDesktop();
-      else void Bridge.openSession(task?.sessionId ?? null, task?.sessionCwd ?? null);
+      else void Bridge.openSession(task?.sessionId ?? null, task?.sessionCwd ?? null, editorForTask(task, State.mainPillId));
       if (State.mode === "expanded") host.collapse();
       break;
     }

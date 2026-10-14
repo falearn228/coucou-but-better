@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Zed integration** *(Windows/Linux)*: Zed can be the main workspace pill. Claude Code sessions in its terminal route to Zed, tagged agents retain their editor, and session navigation and diff files open in Zed through `zed` or `zeditor`. Uses the existing Claude Code hooks.
 - **Flow dictation** *(macOS, GitHub build)* — hold a key anywhere on the Mac (right ⌥ by default, or right ⌘, right ⌃ or fn), speak, let go: your words are pasted where you type, like Wispr Flow. A small pill rests at the bottom of the screen while Flow dictation is on; when you speak it opens into Mochi and nine dots rising and falling with the graves and the aigus of your voice. Two quick taps keep it listening hands-free until the next tap; Esc cancels. Speech is recognised by the Mac (on-device when it can), and the clipboard gets back what it held after the paste. Off by default — Settings → Voice; it needs the Accessibility permission to see the key and paste
 
 ## Windows 0.4.1.f — October 14, 2026

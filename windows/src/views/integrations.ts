@@ -4,6 +4,7 @@
 // Cal.com is the one simplification: macOS shows a three-level calendar
 // (month → day → booking); here it is the list of upcoming bookings.
 
+import { editorForTask } from "../core/editors";
 import { h, svg, clear, dot } from "./dom";
 import { ICONS } from "./icons";
 import { State, type AgentTask } from "../core/state";
@@ -89,13 +90,13 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
   const status = idleStatus(task.id, info, State.settings.model);
 
   const actions = h("div", { class: "int-actions" });
-  if (task.id === "integration_claude" && task.sessionId) {
+  if ((task.id === "integration_claude" && task.sessionId) || task.id === "agent_zed") {
     actions.append(
       h("button", {
         class: "link-btn",
         style: `color:${task.color}b3`,
-        text: t("Open terminal"),
-        onclick: () => void Bridge.openSession(task.sessionId ?? null, task.sessionCwd ?? null),
+        text: task.id === "agent_zed" && !task.sessionId ? t("Open {name}", { name: "Zed" }) : t("Open terminal"),
+        onclick: () => void Bridge.openSession(task.sessionId ?? null, task.sessionCwd ?? null, editorForTask(task, State.mainPillId)),
       }),
     );
   } else if (task.id === "agent_claude-desktop") {

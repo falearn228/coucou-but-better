@@ -62,7 +62,7 @@ You can also [build it yourself](#build-it-yourself).
 | Drag Mochi out of the island | He moves onto your desktop and hangs out there, in his outfit, watching your cursor. Drop him back on the island to bring him home |
 | On the desktop: click / right-click / double-click Mochi | Poke him / the wardrobe / he flies home. Drag him to move him |
 | Drag a file onto the island | Mochi turns into a box, swallows it, then offers to answer questions about it |
-| Click a file in the session ticker | Its diff opens in the island; ↗ opens the file in VS Code, ‹ or `Esc` goes back |
+| Click a file in the session ticker | Its diff opens in the island; ↗ opens the file in the session editor (Zed or VS Code), ‹ or `Esc` goes back |
 | `Esc` | Closes the island |
 | Put a file named like one of Mochi's sounds (`finish.wav`, `approval.mp3`, `greet.m4a`…) in the sounds folder | It replaces that sound after **Settings → General → Reload sounds**. **Open sounds folder** shows the folder: `~/.config/coucou/sounds` on Linux, `%APPDATA%\Coucou\sounds` on Windows |
 | Tray icon | Open, Weekly recap, Wardrobe…, Settings…, Pause, Quit |
@@ -134,7 +134,7 @@ answer on one line, still, until the next prompt.
 ## Your pills
 
 **Settings… → Active pills** lists the tools you use, from the same catalog as
-the Mac app. Pick your **main tool** — VS Code, Cursor, Codex or Antigravity —
+the Mac app. Pick your **main tool** — Claude Code, Cursor, Zed, Codex or Antigravity —
 which is always there and doesn't take a slot, then declare up to four more:
 agents (Gemini CLI, Copilot CLI, Muse Code, OpenCode, Amp, Hermes, Claude
 Desktop), the chat providers (Anthropic, Google AI, OpenAI, Ollama, LM Studio),
@@ -142,6 +142,21 @@ and the services under **Integrations**. A pill fed by hooks says whether its
 hooks are installed, never asks for a key; a local model server's pill says
 whether the chat is connected to it. A session on a pill you didn't
 declare still shows up, for as long as it runs.
+
+### Zed
+
+Choose **Zed** in **Settings → Active pills → Main**, or add it as an extra pill.
+Install the existing **Claude Code hooks**, then start Claude Code in Zed's integrated
+terminal. Coucou detects `TERM_PROGRAM=zed` (or the older `ZED_TERM=true`) and
+shows its work, permission requests, questions and diffs on the Zed pill.
+Explicitly tagged agents such as Codex keep their own pill and remember Zed as
+the editor. **Open terminal** first focuses the session window; if it cannot
+find it, it opens the project in Zed. The diff card's ↗ opens the file in Zed.
+
+The `zed` CLI must be on PATH (`zeditor` is also supported on Linux). See the
+[Zed CLI reference](https://zed.dev/docs/reference/cli) for installation. This
+integration covers terminal sessions that send Coucou hooks; Zed's built-in
+Agent Panel does not send those events automatically.
 
 ## Claude Code
 

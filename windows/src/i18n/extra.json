@@ -1541,6 +1541,17 @@
    "ru": "Открыть настройки",
    "id": "Buka Pengaturan"
   },
+  "Open in Zed": {
+   "zh-Hans": "在 Zed 中打开",
+   "hi": "Zed में खोलें",
+   "es": "Abrir en Zed",
+   "ar": "فتح في Zed",
+   "fr": "Ouvrir dans Zed",
+   "bn": "Zed-এ খুলুন",
+   "pt-BR": "Abrir no Zed",
+   "ru": "Открыть в Zed",
+   "id": "Buka di Zed"
+  },
   "Open in VS Code": {
    "zh-Hans": "在 VS Code 中打开",
    "hi": "VS Code में खोलें",
