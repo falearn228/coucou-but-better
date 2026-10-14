@@ -1061,7 +1061,7 @@ export class Island {
     const inWardrobe = State.mode === "expanded" && State.view === "wardrobe";
     const outfitId = inWardrobe
       ? State.wardrobeTargetId ?? focus?.id ?? State.mainPillId
-      : State.mode === "expanded" ? focus?.id ?? State.mainPillId : State.mainPillId;
+      : focus?.id ?? State.mainPillId;
     const wardrobeTask = State.tasks.find((task) => task.id === outfitId);
     // While a plan card is open Mochi wears the plan's colour, like its pill.
     this.engine.bodyColor = inWardrobe

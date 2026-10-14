@@ -93,6 +93,18 @@ fn xdg_user_dir(text: &str, key: &str, home: &Path) -> Option<PathBuf> {
 /// plugin paths that vanish once Coucou quits. Give ours its own file.
 pub fn prepare_environment() {
     prefer_x11_on_gnome();
+    // The DMA-BUF renderer can retain an obsolete accelerated canvas layer in
+    // transparent X11 overlays. WebKit's fallback keeps those pixels and the
+    // live canvas in sync. Set this before GTK/WebKit creates any child process;
+    // leave an explicit user override and native Wayland sessions alone.
+    let backend = std::env::var("GDK_BACKEND").unwrap_or_default();
+    let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+        && std::env::var_os("DISPLAY").is_some()
+        && x11_backend(&session, &backend)
+    {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
     follow_gnome_text_scaling();
     if std::env::var_os("APPIMAGE").is_none() || std::env::var_os("GST_REGISTRY").is_some() {
         return;
@@ -100,6 +112,14 @@ pub fn prepare_environment() {
     let cache = xdg("XDG_CACHE_HOME", ".cache").join("coucou");
     if std::fs::create_dir_all(&cache).is_ok() {
         std::env::set_var("GST_REGISTRY", cache.join("gstreamer-registry.bin"));
+    }
+}
+
+fn x11_backend(session: &str, backend: &str) -> bool {
+    match backend.split(',').next().unwrap_or("").trim() {
+        "x11" => true,
+        "" => session.eq_ignore_ascii_case("x11"),
+        _ => false,
     }
 }
 
@@ -451,7 +471,9 @@ thread_local! {
 /// gone". GDK's pointer focus does: it follows the compositor's wl_pointer
 /// enter/leave. It is read every 100 ms while the island is shown; both edges go
 /// to the page as `pointer-inside`, and leaving also emits the far-away cursor
-/// the page uses. While the island is hidden the timer is removed altogether
+/// the page uses. On X11 it also forwards native window-local coordinates over
+/// the input region, so missed DOM motion events cannot freeze the gaze.
+/// While the island is hidden the timer is removed altogether
 /// (set_pointer_watch), so a hidden island costs nothing.
 static POINTER_WIN: std::sync::OnceLock<WebviewWindow> = std::sync::OnceLock::new();
 static WATCH_WANTED: AtomicBool = AtomicBool::new(true);
@@ -482,20 +504,30 @@ fn start_pointer_watch() {
         return;
     };
     let inside = std::cell::Cell::new(false);
+    let last_cursor = std::cell::Cell::new(None);
+    let x11 = gtk::gdk::Display::default()
+        .map(|d| d.type_().name().contains("X11"))
+        .unwrap_or(false);
     gtk::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
         if !WATCH_WANTED.load(Ordering::Relaxed) {
             WATCH_RUNNING.store(false, Ordering::Relaxed);
             return gtk::glib::ControlFlow::Break;
         }
-        let now_inside = ISLAND_GTK
+        let (now_inside, cursor) = ISLAND_GTK
             .with(|cell| {
                 let gw = cell.borrow().clone()?;
                 let ours = gw.window()?;
                 let pointer = gtk::gdk::Display::default()?.default_seat()?.pointer()?;
+                if x11 {
+                    // Feed gaze from native window coordinates even when the
+                    // transparent WebKit layer misses a DOM motion/enter event.
+                    let (_, x, y, _) = ours.device_position_double(&pointer);
+                    return Some((pointer_in_region(*INPUT_REGION.lock().unwrap(), x, y), Some((x, y))));
+                }
                 let (under, _, _) = pointer.window_at_position();
-                Some(under?.toplevel() == ours.toplevel())
+                Some((under?.toplevel() == ours.toplevel(), None))
             })
-            .unwrap_or(false);
+            .unwrap_or((false, None));
         if inside.replace(now_inside) != now_inside {
             // The page gates its own (late, sometimes stale) mouse events on
             // this state, so a mousemove queued before the pointer left cannot
@@ -505,8 +537,19 @@ fn start_pointer_watch() {
                 let _ = win.emit("cursor", crate::island::CursorPayload { x: -10_000.0, y: -10_000.0 });
             }
         }
+        let cursor = cursor.filter(|_| now_inside);
+        if last_cursor.replace(cursor) != cursor {
+            if let Some((x, y)) = cursor {
+                let _ = win.emit("cursor", crate::island::CursorPayload { x, y });
+            }
+        }
         gtk::glib::ControlFlow::Continue
     });
+}
+
+fn pointer_in_region(region: Region, x: f64, y: f64) -> bool {
+    region.map(|(rx, ry, w, h)| w > 0.0 && h > 0.0 && x >= rx && x < rx + w && y >= ry && y < ry + h)
+        .unwrap_or(true)
 }
 
 /// Puts the layer surface on the display whose logical origin is (`x`, `y`).
@@ -768,6 +811,28 @@ pub fn layer_display(island: &WebviewWindow, mochi: &WebviewWindow) -> Option<(f
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn x11_renderer_fallback_respects_the_selected_backend() {
+        assert!(x11_backend("x11", ""));
+        assert!(x11_backend("wayland", "x11"));
+        assert!(x11_backend("wayland", "x11,wayland"));
+        assert!(!x11_backend("wayland", ""));
+        assert!(!x11_backend("x11", "wayland"));
+        assert!(!x11_backend("wayland", "wayland,x11"));
+    }
+
+    #[test]
+    fn native_pointer_is_only_sent_over_the_visible_input_region() {
+        let compact = Some((210.0, 0.0, 300.0, 32.0));
+        assert!(pointer_in_region(compact, 250.0, 12.0));
+        assert!(pointer_in_region(compact, 500.0, 12.0));
+        assert!(!pointer_in_region(compact, 209.0, 12.0));
+        assert!(!pointer_in_region(compact, 510.0, 12.0));
+        assert!(!pointer_in_region(compact, 250.0, 32.0));
+        assert!(!pointer_in_region(Some((0.0, 0.0, 0.0, 0.0)), 0.0, 0.0));
+        assert!(pointer_in_region(None, 20.0, 2.0));
+    }
 
     #[test]
     fn only_a_private_directory_of_ours_can_hold_the_relay_socket() {
