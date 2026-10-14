@@ -7,7 +7,7 @@
 import { Ease, lerp, type EaseFn } from "../core/anim";
 import { Sound } from "../core/sound";
 import type { BotEmoteName, BotStateName } from "../core/layout";
-import { PUMPKIN_BODY, drawOutfitBehind, drawOutfitFront, makeHead } from "./outfits";
+import { AMONG_US_BODY, PUMPKIN_BODY, VERITY_BODY, drawOutfitBehind, drawOutfitFront, makeHead } from "./outfits";
 import type { Outfit } from "./wardrobe";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ export class BotEngine {
   sx = 1; sy = 1; oy = 0; ox = 0;
   tint = 0; morph = 0; hands = 0; blush = 0; es = 1; badgeS = 0;
 
-  // Outfit (the main Mochi only — minis never wear one). `outfit` is what is
+  // Outfit for the main Mochi or an agent's miniature. `outfit` is what is
   // drawn; it changes only once the previous one has left.
   outfit: Outfit = "none";
   /** 0 = gone, 1 = fully on. */
@@ -534,7 +534,7 @@ export class BotEngine {
 
   /** Wearing something visible: the body then turns as one piece when it rolls. */
   private get rigidRoll(): boolean {
-    return !this.isMini && this.outfit !== "none" && this.outfitPresence > 0.05;
+    return this.outfit !== "none" && this.outfitPresence > 0.05;
   }
 
   /** True while anything is still moving — lets the island stop its RAF loop. */
@@ -793,9 +793,9 @@ export class BotEngine {
     if (this.tilt !== 0) x.rotate(this.tilt);
     x.scale(this.sx, this.sy);
 
-    const dressed = !this.isMini && this.outfit !== "none";
+    const dressed = this.outfit !== "none";
     const head = dressed ? makeHead(R, this.yaw, this.pitch, this.physDx, this.physDy) : null;
-    const outfitState = { presence: this.outfitPresence, morph: this.morph };
+    const outfitState = { presence: this.outfitPresence, morph: this.morph, open: this.open };
     if (head) drawOutfitBehind(x, this.outfit, head, outfitState);
 
     const body = this.bodyPath(rx, ry, R);
@@ -857,19 +857,21 @@ export class BotEngine {
     return p;
   }
 
-  /** How much of the pumpkin's orange shows on the body (it comes and goes with the outfit). */
-  private get pumpkinAlpha(): number {
-    if (this.isMini || this.outfit !== "pumpkin") return 0;
+  /** Full-body costumes fade together with their accessories and mailbox morph. */
+  private get costumeAlpha(): number {
+    if (this.outfit !== "pumpkin" && this.outfit !== "amongUs" && this.outfit !== "verity") return 0;
     return Math.min(1, this.outfitPresence * 2.5) * (1 - this.morph);
   }
 
   private drawBody(x: CanvasRenderingContext2D, body: Path2D, R: number, rx: number, ry: number) {
-    const pumpkin = this.pumpkinAlpha;
+    const costume = this.costumeAlpha;
+    const palette = this.outfit === "amongUs" ? AMONG_US_BODY
+      : this.outfit === "verity" ? VERITY_BODY : PUMPKIN_BODY;
     if (this.bodyColor) {
       // Mini bots: flat solid fill — no gradient, no reflection, no highlight
       x.fillStyle = rgba(this.bodyColor, 1);
       x.fill(body);
-      if (pumpkin <= 0.001) return;
+      if (costume <= 0.001) return;
     } else {
       const g = x.createLinearGradient(rx * 0.7, -ry * 0.85, -rx * 0.8, ry * 0.9);
       g.addColorStop(0, rgba(BASE_TOP));
@@ -878,18 +880,19 @@ export class BotEngine {
       x.fill(body);
     }
     x.save();
-    if (pumpkin > 0.001) {
+    if (costume > 0.001) {
       const pg = x.createLinearGradient(rx * 0.7, -ry * 0.85, -rx * 0.8, ry * 0.9);
-      pg.addColorStop(0, PUMPKIN_BODY[0]);
-      pg.addColorStop(1, PUMPKIN_BODY[1]);
-      x.globalAlpha = pumpkin;
+      pg.addColorStop(0, palette[0]);
+      pg.addColorStop(1, palette[1]);
+      x.globalAlpha = costume;
       x.fillStyle = pg;
       x.fill(body);
-      // A flat-coloured body only gets the shading while it is a pumpkin.
-      x.globalAlpha = this.bodyColor ? pumpkin : 1;
+      // Flat-coloured agents gain the suit's shading only while it is worn.
+      x.globalAlpha = this.bodyColor ? costume : 1;
     }
 
-    const effectiveTint = this.tint * (1 - this.morph);
+    const fixedPalette = this.outfit === "amongUs" || this.outfit === "verity";
+    const effectiveTint = this.tint * (1 - this.morph) * (fixedPalette ? 0.18 : 1);
     if (effectiveTint > 0.01) {
       const tg = x.createLinearGradient(0, ry, 0, -ry);
       tg.addColorStop(0, rgba(this.col, 0.72 * effectiveTint));
@@ -914,6 +917,8 @@ export class BotEngine {
   }
 
   private drawEyes(x: CanvasRenderingContext2D, body: Path2D, R: number, rx: number, ry: number) {
+    // Full-face skins draw their own blinking eyes or visor.
+    if ((this.outfit === "amongUs" || this.outfit === "verity") && this.costumeAlpha >= 0.999) return;
     let shape: EyeShape = this.eyeOverride ?? this.cfg.eye;
     // Dancing: happy eyes in the calm states.
     if (this.isDancing && this.dancingLevel > 0.15 && !this.isMini && (this.state === "idle" || this.state === "finished")) {

@@ -2304,6 +2304,26 @@ input[type="range"]::-webkit-slider-thumb {
   gap: 5px;
 }
 
+.wardrobe-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dim-2);
+  font: 400 11px var(--font);
+}
+
+.wardrobe-target select {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: var(--card-flat);
+  color: var(--ink);
+  font: inherit;
+}
+
 .wardrobe-item {
   width: 30px;
   height: 30px;

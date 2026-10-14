@@ -11,6 +11,7 @@ import { Bridge, emitToWindow, onEvent, type DesktopMode } from "../core/bridge"
 import type { BotEmoteName } from "../core/layout";
 import { Sound } from "../core/sound";
 import { BotEngine } from "../mochi/engine";
+import { beginBotFrame } from "../mochi/frame";
 import {
   DESKTOP_EVENTS, DOUBLE_CLICK_MS, DRAG_THRESHOLD, PANEL_SIZE, agentActive, gaze, isOverBody,
   layerDragTopLeft, lookOrigin, pointerDistance, shouldSleep, windowDragTopLeft,
@@ -195,8 +196,6 @@ class DesktopMochi {
   }
 
   private draw(dt: number, now: number) {
-    const ctx = this.canvas.getContext("2d");
-    if (!ctx) return;
     const engine = this.engine;
     engine.setOutfit(this.snap.outfit, true);
     if (!this.asleep) {
@@ -210,8 +209,8 @@ class DesktopMochi {
     engine.setDancing(this.snap.dancing && !this.asleep);
     engine.update(dt);
     const dpr = this.dpr();
-    ctx.setTransform(dpr, 0, 0, dpr, SIDE * dpr, 0);
-    ctx.clearRect(-SIDE, 0, PANEL_SIZE, PANEL_SIZE);
+    const ctx = beginBotFrame(this.canvas, engine.outfit, PANEL_SIZE, PANEL_SIZE, dpr, SIDE);
+    if (!ctx) return;
     ctx.save();
     engine.applyDance(ctx, DRAW_W, PANEL_SIZE);
     engine.draw(ctx, DRAW_W, PANEL_SIZE);

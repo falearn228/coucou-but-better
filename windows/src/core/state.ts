@@ -135,6 +135,8 @@ export interface Settings {
    * Same raw values as the Mac's "mochiOutfit"; read it through parseOutfit.
    */
   mochiOutfit: string;
+  /** Individual outfits keyed by the stable agent/pill ID. */
+  pillOutfits: Record<string, string>;
   /**
    * A colour of the user's own for a pill's Mochi, by pill ID ("#RRGGBB").
    * Empty means the catalog's colours; read it through core/pill-colors.ts.
@@ -188,6 +190,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customUrl: "",
   shortcuts: {},
   mochiOutfit: DEFAULT_OUTFIT,
+  pillOutfits: {},
   pillColors: {},
   language: "",
 };
@@ -256,6 +259,8 @@ class AppState {
 
   /** Outfit shown on Mochi while the pointer rests on a wardrobe button. */
   wardrobePreview: Outfit | null = null;
+  /** Which agent the wardrobe is editing; cleared when it closes. */
+  wardrobeTargetId: string | null = null;
 
   lastActivity = performance.now();
 

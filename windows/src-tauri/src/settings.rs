@@ -57,6 +57,8 @@ pub struct Settings {
     /// season), "none" or an outfit id — the Mac's raw values. The island reads
     /// anything it doesn't know as "auto", so the value is stored as it comes.
     pub mochi_outfit: String,
+    /// Individual outfits, keyed by stable pill ID. Empty preserves old defaults.
+    pub pill_outfits: BTreeMap<String, String>,
     /// A colour of the user's own for a pill's Mochi, by pill ID ("#RRGGBB"),
     /// picked in Settings → Active pills. Empty means the catalog's colours.
     /// Kept as it comes, like `mochi_outfit`: src/core/pill-colors.ts reads
@@ -149,6 +151,7 @@ impl Default for Settings {
             custom_url: String::new(),
             shortcuts: Default::default(),
             mochi_outfit: "auto".into(),
+            pill_outfits: BTreeMap::new(),
             pill_colors: BTreeMap::new(),
             language: String::new(),
             desktop_mochi: DesktopMochiPref::default(),
@@ -436,6 +439,7 @@ mod tests {
   "customUrl": "https://llm.example.com",
   "shortcuts": { "openChat": { "keys": "Ctrl+Shift+K", "enabled": false } },
   "mochiOutfit": "witchHat",
+  "pillOutfits": { "agent_codex": "crown", "integration_claude": "beanie" },
   "pillColors": { "integration_claude": "#2DD4BF" },
   "language": "pt-BR",
   "desktopMochi": { "onDesktop": true, "spot": { "x": 1500.5, "y": -300.0, "space": "screen" } },
@@ -694,6 +698,22 @@ mod tests {
     }
 
     #[test]
+    fn individual_outfits_survive_serialization_and_old_files_keep_defaults() {
+        let old = parse(&custom_with("pillOutfits", None)).unwrap();
+        assert!(old.pill_outfits.is_empty());
+        assert_eq!(old.mochi_outfit, "witchHat");
+        let loaded = parse(&custom_with("pillOutfits", Some(json!({
+            "agent_codex": "crown", "integration_claude": "beanie", "agent_future": "futureHat"
+        })))).unwrap();
+        let restored = parse(&serde_json::to_vec(&loaded).unwrap()).unwrap();
+        assert_eq!(restored.pill_outfits, loaded.pill_outfits);
+        assert_eq!(restored.pill_outfits.get("integration_claude").map(String::as_str), Some("beanie"));
+        let broken = parse(&custom_with("pillOutfits", Some(json!(["crown"])))).unwrap();
+        assert!(broken.pill_outfits.is_empty());
+        assert_eq!(broken.model, "some-model");
+    }
+
+    #[test]
     fn a_missing_field_takes_its_default_and_the_rest_are_kept() {
         for key in custom().as_object().unwrap().keys() {
             let loaded = parse(&custom_with(key, None))
@@ -943,6 +963,7 @@ mod tests {
                 "customUrl",
                 "shortcuts",
                 "mochiOutfit",
+                "pillOutfits",
                 "pillColors",
                 "language",
                 "desktopMochi",

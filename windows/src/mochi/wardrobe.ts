@@ -8,7 +8,7 @@ import { N_, labels, t } from "../i18n/i18n";
 /** Every outfit, plus "auto" (dress for the season) and "none". Order of the wardrobe. */
 export const OUTFIT_SELECTIONS = [
   "auto", "none", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
-  "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars",
+  "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars", "amongUs", "verity",
 ] as const;
 
 /** What can be stored in the preferences. The raw values are the Mac's, keep them stable. */
@@ -36,6 +36,8 @@ export const OUTFIT_KEYS: Record<OutfitSelection, string> = {
   pumpkin: N_("Pumpkin"),
   santaHat: N_("Santa hat"),
   bunnyEars: N_("Bunny ears"),
+  amongUs: N_("Among Us"),
+  verity: N_("Verity"),
 };
 
 /** In the current language: every read goes through `t()`. */
@@ -59,6 +61,31 @@ const SELECTION_SET: ReadonlySet<string> = new Set(OUTFIT_SELECTIONS);
  */
 export function parseOutfit(raw: unknown): OutfitSelection {
   return typeof raw === "string" && SELECTION_SET.has(raw) ? (raw as OutfitSelection) : DEFAULT_OUTFIT;
+}
+
+export interface OutfitPreferences {
+  mochiOutfit?: unknown;
+  pillOutfits?: unknown;
+}
+
+/** Missing overrides preserve the old main outfit and leave other agents bare. */
+export function pillOutfit(settings: OutfitPreferences, id: string, mainId: string): OutfitSelection {
+  const outfits = settings.pillOutfits;
+  if (outfits && typeof outfits === "object" && !Array.isArray(outfits) && Object.hasOwn(outfits, id)) {
+    return parseOutfit((outfits as Record<string, unknown>)[id]);
+  }
+  return id === mainId ? parseOutfit(settings.mochiOutfit) : "none";
+}
+
+/** A fresh map, so dressing one agent never changes another or a saved draft. */
+export function withPillOutfit<T extends OutfitPreferences>(
+  settings: T, id: string, mainId: string, selection: OutfitSelection,
+): T & { pillOutfits: Record<string, string> } {
+  const raw = settings.pillOutfits;
+  const entries = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? Object.entries(raw).filter(([, value]) => typeof value === "string") : [];
+  const pillOutfits = Object.fromEntries([...entries, [id, selection]]) as Record<string, string>;
+  return { ...settings, pillOutfits, ...(id === mainId ? { mochiOutfit: selection } : {}) };
 }
 
 /** Easter Sunday of `year` (Meeus/Jones/Butcher), as [month 1–12, day]. */

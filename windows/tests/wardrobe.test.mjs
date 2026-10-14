@@ -5,13 +5,38 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   OUTFIT_SELECTIONS, OUTFIT_LABELS, SeasonCache, easterDate, parseOutfit, resolveOutfit,
-  seasonalOutfit, wardrobeHeader,
+  seasonalOutfit, wardrobeHeader, pillOutfit, withPillOutfit,
 } from "../src/mochi/wardrobe.ts";
 import { DEFAULT_SETTINGS } from "../src/core/state.ts";
 
 /** A local calendar day, at noon so no time zone can push it into the next one. */
 const day = (y, m, d) => new Date(y, m - 1, d, 12);
 const season = (y, m, d) => seasonalOutfit(day(y, m, d));
+
+test("older settings preserve the main outfit without dressing every other agent", () => {
+  const old = { mochiOutfit: "pumpkin" };
+  assert.equal(pillOutfit(old, "agent_codex", "agent_codex"), "pumpkin");
+  assert.equal(pillOutfit(old, "integration_claude", "agent_codex"), "none");
+  assert.equal(pillOutfit({ ...old, pillOutfits: [] }, "agent_codex", "agent_codex"), "pumpkin");
+});
+
+test("each agent keeps its own outfit across a save and a change of main tool", () => {
+  const old = { mochiOutfit: "pumpkin", pillOutfits: { agent_future: "futureHat" } };
+  const claude = withPillOutfit(old, "integration_claude", "agent_codex", "beanie");
+  const both = withPillOutfit(claude, "agent_codex", "agent_codex", "crown");
+  assert.equal(old.mochiOutfit, "pumpkin");
+  assert.deepEqual(old.pillOutfits, { agent_future: "futureHat" });
+  assert.equal(claude.mochiOutfit, "pumpkin");
+  const restored = JSON.parse(JSON.stringify(both));
+  assert.equal(pillOutfit(restored, "agent_codex", "agent_codex"), "crown");
+  assert.equal(pillOutfit(restored, "integration_claude", "agent_codex"), "beanie");
+  assert.equal(pillOutfit(restored, "agent_codex", "integration_claude"), "crown");
+  assert.equal(restored.pillOutfits.agent_future, "futureHat");
+  assert.equal(pillOutfit(restored, "agent_future", "agent_codex"), "auto");
+  const bare = withPillOutfit(restored, "integration_claude", "agent_codex", "none");
+  assert.equal(pillOutfit(bare, "integration_claude", "agent_codex"), "none");
+  assert.equal(pillOutfit(bare, "agent_codex", "agent_codex"), "crown");
+});
 
 test("witch hat from October 1 to November 1", () => {
   assert.equal(season(2026, 9, 30), "none");
@@ -84,10 +109,10 @@ test("auto dresses for the season, any other choice is worn as is", () => {
   assert.equal(resolveOutfit("beanie", d), "beanie");
 });
 
-test("the stored values are the Mac's, in the wardrobe's order", () => {
+test("the existing wardrobe IDs stay in order with the custom skins appended", () => {
   assert.deepEqual([...OUTFIT_SELECTIONS], [
     "auto", "none", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
-    "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars",
+    "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars", "amongUs", "verity",
   ]);
   for (const sel of OUTFIT_SELECTIONS) assert.ok(OUTFIT_LABELS[sel], `${sel} has a label`);
 });

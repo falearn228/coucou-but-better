@@ -239,14 +239,21 @@ fn open_in_vscode(path: Option<String>) -> bool {
 }
 
 /// "Open terminal": brings forward the terminal or editor window the session
-/// runs in, when it was found (see session_window.rs); otherwise opens the
-/// folder in VS Code, as before.
+/// runs in (see session_window.rs). Linux also handles Codex's detached server;
+/// a missing or ambiguous terminal is logged instead of opening another app.
 #[tauri::command]
 fn open_session(session_id: Option<String>, path: Option<String>) -> bool {
-    let Some(owners) = session_id.as_deref().and_then(session_window::lookup) else {
-        return open_in_vscode(path);
-    };
-    let folder = path.as_deref().map(session_window::folder_name).unwrap_or_default().to_string();
+    #[cfg(target_os = "linux")]
+    let codex = session_id.as_deref().is_some_and(session_window::is_codex);
+    let owners = session_id
+        .as_deref()
+        .and_then(session_window::lookup)
+        .unwrap_or_default();
+    let folder = path
+        .as_deref()
+        .map(session_window::folder_name)
+        .unwrap_or_default()
+        .to_string();
     #[cfg(windows)]
     {
         if platform::focus_session_window(&owners, &folder) {
@@ -255,13 +262,14 @@ fn open_session(session_id: Option<String>, path: Option<String>) -> bool {
         open_in_vscode(path)
     }
     // Linux asks the display server, KWin or the terminal, which can take a
-    // moment: never on the UI thread a sync command runs on. VS Code still
-    // opens when none of them could bring the window forward.
+    // moment: never on the UI thread a sync command runs on.
     #[cfg(target_os = "linux")]
     {
         std::thread::spawn(move || {
-            if !platform::focus_session_window(&owners, &folder) {
-                open_in_vscode(path);
+            if !platform::focus_session_window(&owners, &folder)
+                && !(codex && platform::focus_codex_terminal(path.as_deref()))
+            {
+                log::line(format!("open terminal: no unambiguous session window found (codex={codex})"));
             }
         });
         true

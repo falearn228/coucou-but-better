@@ -162,9 +162,9 @@ pub struct ApprovalIn {
 
 /// The values the island stores for Mochi's wardrobe ("auto" follows the seasons on the phone's own calendar).
 /// Same raw values as the Mac and the PC; anything else is not sent.
-pub const OUTFIT_CHOICES: [&str; 13] = [
+pub const OUTFIT_CHOICES: [&str; 15] = [
     "auto", "none", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
-    "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars",
+    "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars", "amongUs", "verity",
 ];
 
 fn clean_services(cards: Vec<ServiceIn>) -> Vec<ServiceIn> {

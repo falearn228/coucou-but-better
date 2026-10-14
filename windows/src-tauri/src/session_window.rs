@@ -161,6 +161,24 @@ pub fn folder_name(path: &str) -> &str {
 const MAX_SESSIONS: usize = 64;
 
 static SESSIONS: Mutex<Vec<(String, Vec<u32>)>> = Mutex::new(Vec::new());
+// Agent identity survives even when a short-lived relay exits before /proc
+// can be read. Keep it separately so `known` still allows that walk to retry.
+static CODEX_SESSIONS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+pub fn remember_codex(session: &str) {
+    if !valid_session(session) {
+        return;
+    }
+    let mut list = CODEX_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    list.retain(|s| s != session);
+    list.push(session.to_string());
+    let excess = list.len().saturating_sub(MAX_SESSIONS);
+    list.drain(..excess);
+}
+
+pub fn is_codex(session: &str) -> bool {
+    CODEX_SESSIONS.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|s| s == session)
+}
 
 /// A session ID arrives in a hook payload: only what Claude Code sends (a
 /// UUID) is kept, at most 128 characters.
@@ -194,6 +212,7 @@ pub fn lookup(session: &str) -> Option<Vec<u32>> {
 
 pub fn forget(session: &str) {
     SESSIONS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(s, _)| s != session);
+    CODEX_SESSIONS.lock().unwrap_or_else(|e| e.into_inner()).retain(|s| s != session);
 }
 
 #[cfg(test)]
@@ -377,6 +396,21 @@ mod tests {
 
     #[test]
     fn sessions_are_remembered_by_id_and_only_plausible_ids_are_kept() {
+        remember_codex("s-codex-fast-relay");
+        assert!(is_codex("s-codex-fast-relay"));
+        assert!(!known("s-codex-fast-relay"));
+        assert_eq!(lookup("s-codex-fast-relay"), None);
+        remember("s-codex-fast-relay", vec![42]);
+        assert!(is_codex("s-codex-fast-relay"));
+        forget("s-codex-fast-relay");
+        assert!(!is_codex("s-codex-fast-relay"));
+        remember_codex("invalid/session");
+        assert!(!is_codex("invalid/session"));
+        for i in 0..(MAX_SESSIONS + 5) {
+            remember_codex(&format!("s-codex-cap-{i}"));
+        }
+        assert!(!is_codex("s-codex-cap-0"));
+        assert!(is_codex(&format!("s-codex-cap-{}", MAX_SESSIONS + 4)));
         remember("s-test-1", vec![42]);
         remember("s-test-1", vec![43, 44]);
         assert_eq!(lookup("s-test-1"), Some(vec![43, 44]));
