@@ -814,6 +814,163 @@ function scarf(ctx: Ctx, H: Head) {
 // ── Pumpkin (the body colours come from the engine) ───────────────────────────
 
 export const PUMPKIN_BODY: readonly [string, string] = ["#FFA94D", "#E8590C"];
+export const AMONG_US_BODY: readonly [string, string] = ["#FF394B", "#C91632"];
+export const VERITY_BODY: readonly [string, string] = ["#FAF32A", "#AFB400"];
+
+// ── Verity: black oval eyes and the reference's broad, toothy grin ─────────────
+
+function verityFace(ctx: Ctx, H: Head, body: Path2D, simple: boolean, open: number) {
+  if (faceTurnedAway(H)) return;
+  const R = H.R;
+  const ink = "#171909";
+  ctx.save();
+  ctx.clip(body);
+  ctx.translate(Math.sin(H.yaw) * H.rx * 0.65, -Math.sin(H.pitch) * H.ry * 0.36);
+  ctx.scale(Math.max(0.18, Math.cos(H.yaw)), Math.max(0.7, Math.cos(H.pitch)));
+  // Narrow vertical eyes, with the original Mochi blink rather than a static face.
+  ctx.fillStyle = ink;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(side * R * 0.37, -R * 0.35, R * 0.105,
+      R * (0.025 + 0.18 * Math.max(0, Math.min(1, open))), side * 0.025, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const mouth = new Path2D();
+  mouth.moveTo(-R * 0.87, -R * 0.08);
+  mouth.bezierCurveTo(-R * 0.55, R * 0.42, R * 0.55, R * 0.42, R * 0.87, -R * 0.08);
+  mouth.bezierCurveTo(R * 0.75, R * 1.05, -R * 0.75, R * 1.05, -R * 0.87, -R * 0.08);
+  mouth.closePath();
+  ctx.fill(mouth);
+  ctx.lineWidth = R * 0.055;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = ink;
+  ctx.stroke(mouth);
+
+  const top = (x: number) => R * (-0.08 + 0.375 * (1 - (x / (R * 0.87)) ** 2));
+  const bottom = (x: number) => R * (-0.08 + 0.8475 * (1 - (x / (R * 0.87)) ** 2));
+  ctx.save();
+  ctx.clip(mouth);
+  // Individually rounded, slightly uneven teeth in both rows. Fewer teeth at
+  // miniature sizes keep the grin readable rather than turning it into noise.
+  const count = simple ? 6 : 10;
+  for (const lower of [false, true]) {
+    const n = lower ? count - 1 : count;
+    const step = R * 1.72 / n;
+    ctx.fillStyle = lower ? "#DDDECA" : "#FFFFED";
+    for (let i = 0; i < n; i++) {
+      const x0 = -R * 0.86 + step * i + step * 0.045;
+      const x1 = x0 + step * 0.91;
+      const middle = (x0 + x1) / 2;
+      const edge = lower ? bottom(middle) + R * 0.05 : top(middle) - R * 0.08;
+      const direction = lower ? -1 : 1;
+      const depth = R * (0.295 + 0.022 * Math.sin(i * 2.3 + (lower ? 1.1 : 0)));
+      ctx.beginPath();
+      ctx.moveTo(x0, edge - direction * R * 0.12);
+      ctx.lineTo(x1, edge - direction * R * 0.12);
+      ctx.lineTo(x1, edge + direction * depth * 0.84);
+      ctx.quadraticCurveTo(middle, edge + direction * depth * 1.12, x0, edge + direction * depth * 0.86);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  // A thin, uneven meeting line separates the two rows, like the reference.
+  ctx.beginPath();
+  const steps = simple ? 12 : 28;
+  for (let i = 0; i <= steps; i++) {
+    const x = R * (-0.87 + 1.74 * i / steps);
+    const y = (top(x) + bottom(x)) / 2 + R * 0.018 * Math.sin(i * 2.1);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.lineWidth = R * (simple ? 0.055 : 0.04);
+  ctx.stroke();
+  ctx.restore();
+
+  // The upturned creases give the grin its unmistakable Verity expression.
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * R * 0.78, -R * 0.10);
+    ctx.quadraticCurveTo(side * R * 0.88, -R * 0.22, side * R * 0.97, -R * 0.10);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── Among Us: a round Mochi in a crewmate suit ────────────────────────────────
+
+const SUIT_INK = "#301721";
+
+function amongUsBack(ctx: Ctx, H: Head) {
+  const R = H.R;
+  ctx.save();
+  ctx.lineWidth = R * 0.095;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = SUIT_INK;
+  // The backpack peeks out behind the same soft body, following its turn.
+  const packX = -H.rx - R * 0.29 - Math.sin(H.yaw) * R * 0.16;
+  roundRect(ctx, packX, -R * 0.32, R * 0.58, R * 1.02, R * 0.22);
+  ctx.fillStyle = lin(ctx, packX, -R * 0.32, packX + R * 0.5, R * 0.7,
+    [[0, "#E62A40"], [1, "#9E122D"]]);
+  ctx.fill();
+  ctx.stroke();
+  // Short rounded boots give the crewmate silhouette without stretching Mochi.
+  ctx.fillStyle = AMONG_US_BODY[1];
+  for (const side of [-1, 1]) {
+    roundRect(ctx, side * R * 0.48 - R * 0.25, R * 0.57, R * 0.5, R * 0.53, R * 0.19);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** The visor follows the head and gently squashes with Mochi's blink. */
+function amongUsFront(ctx: Ctx, H: Head, body: Path2D, open: number) {
+  const R = H.R;
+  ctx.save();
+  ctx.strokeStyle = SUIT_INK;
+  ctx.lineWidth = R * 0.095;
+  ctx.stroke(body);
+  if (faceTurnedAway(H)) {
+    ctx.restore();
+    return;
+  }
+  ctx.clip(body);
+  const centre = proj(H, [0.10, 0.48, 0.94]);
+  const w = R * 1.69 * Math.max(0.22, Math.abs(Math.cos(H.yaw)));
+  const h = R * 0.88 * (0.55 + 0.45 * Math.max(0, Math.min(1, open)));
+  ctx.translate(centre.x, centre.y);
+  ctx.rotate(Math.sin(H.yaw) * H.pitch * 0.12);
+  roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.45);
+  ctx.fillStyle = "#182B34";
+  ctx.fill();
+  const rim = Math.min(R * 0.095, w * 0.09);
+  const iw = w - rim * 2;
+  const ih = h - rim * 2;
+  roundRect(ctx, -iw / 2, -ih / 2, iw, ih, ih * 0.42);
+  ctx.fillStyle = lin(ctx, 0, -ih / 2, 0, ih / 2,
+    [[0, "#AADDEA"], [0.5, "#80BACC"], [1, "#3F5D6C"]]);
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  // Curved blue upper glass and a darker lower edge, like the reference visor.
+  ctx.beginPath();
+  ctx.moveTo(-iw / 2, -ih / 2);
+  ctx.lineTo(iw / 2, -ih / 2);
+  ctx.lineTo(iw / 2, ih * 0.02);
+  ctx.bezierCurveTo(iw * 0.22, ih * 0.48, -iw * 0.36, ih * 0.3, -iw / 2, -ih * 0.08);
+  ctx.closePath();
+  ctx.fillStyle = lin(ctx, -iw / 2, -ih / 2, iw / 2, ih * 0.35,
+    [[0, "#BCE6F0"], [1, "#8BC4D8"]]);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(iw * 0.13, -ih * 0.17, iw * 0.27, ih * 0.19, 0.12, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(245,253,255,0.96)";
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
 
 function pumpkin(ctx: Ctx, H: Head, body: Path2D, simple: boolean) {
   if (!simple) {
@@ -984,6 +1141,8 @@ export interface OutfitState {
   presence: number;
   /** Mochi's mailbox morph: outfits fade away as he turns into a box. */
   morph: number;
+  /** Optional engine blink, so full-face suits keep a little facial motion. */
+  open?: number;
 }
 
 function faceTurnedAway(H: Head): boolean {
@@ -1016,6 +1175,11 @@ export function drawOutfitBehind(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitSt
   if (alpha <= 0.005) return;
   const simple = H.R < SIMPLIFY_BELOW_R;
   const body = bodyOutline(H.rx, H.ry);
+
+  if (outfit === "amongUs") {
+    withLayer(ctx, alpha, (layer) => amongUsBack(layer, H));
+    return;
+  }
 
   if (ON_FACE.has(outfit)) {
     if (faceTurnedAway(H)) withLayer(ctx, alpha, (l) => drawFace(l, outfit, H, body, simple));
@@ -1060,6 +1224,8 @@ export function drawOutfitFront(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitSta
   }
   withLayer(ctx, alpha, (l) => {
     switch (outfit) {
+      case "amongUs": amongUsFront(l, H, body, st.open ?? 1); break;
+      case "verity": verityFace(l, H, body, simple, st.open ?? 1); break;
       case "beanie": beanie(l, H, body, simple); break;
       case "santaHat": santaHat(l, H, body); break;
       case "partyHat": partyHat(l, H, simple); break;
@@ -1077,16 +1243,18 @@ const INK = "rgb(26,20,18)";
 
 /** A little Mochi wearing `outfit`, centred in a `size`×`size` icon. */
 function iconMochi(ctx: Ctx, size: number, outfit: Outfit) {
-  const R = 10;
+  const R = outfit === "amongUs" ? 8.3 : 10;
   const H = makeHead(R);
   const cx = size / 2;
-  const cy = size / 2 + R * 0.62;
+  const cy = size / 2 + R * (outfit === "amongUs" ? 0.1 : outfit === "verity" ? 0 : 0.62);
   const st: OutfitState = { presence: 1, morph: 0 };
   ctx.save();
   ctx.translate(cx, cy);
   drawOutfitBehind(ctx, outfit, H, st);
   const body = bodyOutline(H.rx, H.ry);
-  const [top, bottom] = outfit === "pumpkin" ? PUMPKIN_BODY : ["rgb(237,237,239)", "rgb(196,197,202)"];
+  const [top, bottom] = outfit === "amongUs" ? AMONG_US_BODY
+    : outfit === "verity" ? VERITY_BODY
+    : outfit === "pumpkin" ? PUMPKIN_BODY : ["rgb(237,237,239)", "rgb(196,197,202)"];
   ctx.fillStyle = lin(ctx, H.rx * 0.7, -H.ry * 0.85, -H.rx * 0.8, H.ry * 0.9, [[0, top], [1, bottom]]);
   ctx.fill(body);
   ctx.fillStyle = rad(ctx, 0, 0, R * 0.15, R * 1.25, [[0, "rgba(0,0,0,0)"], [0.6, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0.2)"]]);

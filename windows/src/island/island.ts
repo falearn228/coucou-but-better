@@ -14,9 +14,11 @@ import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
+import { beginBotFrame } from "../mochi/frame";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
-import { SeasonCache, parseOutfit } from "../mochi/wardrobe";
+import { SeasonCache, pillOutfit, withPillOutfit } from "../mochi/wardrobe";
+import { pillDefinition } from "../core/pills";
 import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
 import { closePlanCard, openPlanColor, planCardOpen } from "../views/usage";
@@ -240,8 +242,9 @@ export class Island {
       openSettingsWindow: () => void Bridge.openSettingsWindow(),
       blip: () => Sound.play("blip"),
       chooseOutfit: (selection) => {
-        if (parseOutfit(State.settings.mochiOutfit) === selection) return;
-        State.settings.mochiOutfit = selection;
+        const id = State.wardrobeTargetId ?? State.focusTask?.id ?? State.mainPillId;
+        if (State.settings.pillOutfits?.[id] === selection) return;
+        State.settings = withPillOutfit(State.settings, id, State.mainPillId, selection);
         void Bridge.saveSettings(State.settings);
         Sound.play("pop");
         this.engine.triggerEmote("proud");
@@ -1048,20 +1051,22 @@ export class Island {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     if (this.canvasPx !== w) {
       this.canvasPx = w;
-      this.botCanvas.width = Math.round(wCss * dpr);
-      this.botCanvas.height = Math.round(hCss * dpr);
       this.botCanvas.style.width = `${wCss}px`;
       this.botCanvas.style.height = `${hCss}px`;
     }
     this.botCanvas.style.left = `${this.botCx.value - wCss / 2}px`;
     this.botCanvas.style.top = `${this.botCy.value - BOT_OVERHANG / 2 - hCss / 2}px`;
 
-    const ctx = this.botCanvas.getContext("2d");
-    if (!ctx) return;
-
     const focus = State.focusTask;
+    const inWardrobe = State.mode === "expanded" && State.view === "wardrobe";
+    const outfitId = inWardrobe
+      ? State.wardrobeTargetId ?? focus?.id ?? State.mainPillId
+      : State.mode === "expanded" ? focus?.id ?? State.mainPillId : State.mainPillId;
+    const wardrobeTask = State.tasks.find((task) => task.id === outfitId);
     // While a plan card is open Mochi wears the plan's colour, like its pill.
-    this.engine.bodyColor = planCardOpen()
+    this.engine.bodyColor = inWardrobe
+      ? hexToRGB(wardrobeTask?.color ?? pillDefinition(outfitId)?.color ?? "#F5F6F8")
+      : planCardOpen()
       ? hexToRGB(openPlanColor())
       : focus?.isIntegration
         ? hexToRGB(focus.color)
@@ -1078,15 +1083,10 @@ export class Island {
         this.engine.slotHVel = 0;
       }
     }
-    // Only the main Mochi is dressed — the one of the main tool's pill (Settings →
-    // Active pills): a focused integration pill shows its own colours, unless
-    // the wardrobe is open (BotCanvasView.showOutfit, macOS).
-    // In the wardrobe the hovered outfit swaps in at once, without the drop-in.
-    const inWardrobe = State.mode === "expanded" && State.view === "wardrobe";
-    const mainFocused = State.focusId == null || State.focusId === State.mainPillId;
-    const showOutfit = mainFocused || State.mode !== "expanded" || inWardrobe;
-    const outfit = State.wardrobePreview ?? this.seasons.get(parseOutfit(State.settings.mochiOutfit));
-    this.engine.setOutfit(showOutfit ? outfit : "none", !inWardrobe);
+    // A wardrobe try-on belongs to its selected agent, never to another pill.
+    const outfit = (inWardrobe ? State.wardrobePreview : null)
+      ?? this.seasons.get(pillOutfit(State.settings, outfitId, State.mainPillId));
+    this.engine.setOutfit(outfit, !inWardrobe);
     // Dances while music plays: always in the compact island, expanded only on
     // the music pill's card (BotCanvasView, macOS). Asked every frame.
     this.engine.setDancing(islandDances({
@@ -1098,8 +1098,8 @@ export class Island {
     }));
 
     this.engine.update(dt);
-    ctx.setTransform(dpr, 0, 0, dpr, BOT_SIDE * dpr, 0);
-    ctx.clearRect(-BOT_SIDE, 0, wCss, hCss);
+    const ctx = beginBotFrame(this.botCanvas, this.engine.outfit, wCss, hCss, dpr, BOT_SIDE);
+    if (!ctx) return;
     ctx.save();
     this.engine.applyDance(ctx, w, hCss);
     this.engine.draw(ctx, w, hCss);
@@ -1150,7 +1150,10 @@ export class Island {
     if (this.greetingShown && !greetingActive) this.greeting.leave();
     this.greetingShown = greetingActive;
     // A wardrobe try-on never outlives the wardrobe.
-    if (State.wardrobePreview && !(expanded && State.view === "wardrobe")) State.wardrobePreview = null;
+    if (!(expanded && State.view === "wardrobe")) {
+      State.wardrobePreview = null;
+      State.wardrobeTargetId = null;
+    }
 
     this.header.sync();
     for (const [name, view] of this.views) {

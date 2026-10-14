@@ -261,6 +261,9 @@ fn note_session_window(pipe: &impl Relay, payload: &Value, event: &str) {
         session_window::forget(session);
         return;
     }
+    if payload.get("coucou_agent").and_then(Value::as_str) == Some("codex") {
+        session_window::remember_codex(session);
+    }
     if session_window::known(session) {
         return;
     }

@@ -10,8 +10,7 @@
 //     manager to raise it, over the x11rb that global-hotkey already brings;
 //   * kitty, whatever the session, also selects the session's tab when its
 //     remote control listens on a socket.
-// GNOME on Wayland has no such door for native windows: nothing is found, and
-// the caller opens the folder in VS Code as before.
+// GNOME on Wayland has no such door for native windows: nothing is found.
 //
 // Everything handed to a script or a command is a number read from /proc of a
 // process we found ourselves (or our own D-Bus name, checked); nothing from a
@@ -130,7 +129,7 @@ fn methods(session_type: &str, wayland_display: &str, display: &str, desktop: &s
 
 /// Brings forward the window a session remembered: the nearest ancestor's,
 /// the one titled after `folder` if it has several. False when no way worked,
-/// so the caller falls back to VS Code.
+/// so the caller can try the detached Codex client instead.
 pub fn focus_session_window(owners: &[u32], folder: &str) -> bool {
     let chain = still_linked(owners);
     if chain.is_empty() {
@@ -159,6 +158,107 @@ pub fn focus_session_window(owners: &[u32], folder: &str) -> bool {
     tab || raised
 }
 
+/// Codex's managed app-server is detached from its terminal clients. The caller
+/// only tries this fallback for a session identified as Codex by its hook.
+/// An exact working directory and a single interactive client are required:
+/// two Codex clients in the same directory cannot be distinguished this way.
+/// WINDOWID comes from that client, never from the server's stale environment.
+pub fn focus_codex_terminal(path: Option<&str>) -> bool {
+    let Some(path) = path.filter(|p| Path::new(p).is_absolute()) else {
+        return false;
+    };
+    let Ok(path) = std::fs::canonicalize(path) else {
+        return false;
+    };
+    let clients = codex_clients();
+    let Some(client) = unique_client(&clients, &path) else {
+        let count = clients.iter().filter(|c| c.cwd == path).count();
+        crate::log::line(format!("open terminal: {count} Codex clients match the session directory"));
+        return false;
+    };
+    let Some(window) = client.window else {
+        crate::log::line("open terminal: Codex client has no WINDOWID");
+        return false;
+    };
+    let ancestors = process_ancestors(client.pid);
+    // X11 verifies that WINDOWID is still a listed window belonging to one of
+    // this client's ancestors. A closed window must never select a different one.
+    if x11::activate_exact(&ancestors, window) {
+        crate::log::line(format!(
+            "open terminal: Codex client {} window {window:#x} raised",
+            client.pid
+        ));
+        true
+    } else {
+        crate::log::line("open terminal: Codex client's window is no longer available");
+        false
+    }
+}
+
+#[derive(Debug)]
+struct CodexClient {
+    pid: u32,
+    cwd: PathBuf,
+    window: Option<u32>,
+}
+
+fn unique_client<'a>(clients: &'a [CodexClient], cwd: &Path) -> Option<&'a CodexClient> {
+    let mut matching = clients.iter().filter(|c| c.cwd == cwd);
+    let client = matching.next()?;
+    matching.next().is_none().then_some(client)
+}
+
+fn window_id(env: &[u8]) -> Option<u32> {
+    let raw = env
+        .split(|b| *b == 0)
+        .find_map(|part| part.strip_prefix(b"WINDOWID="))?;
+    let raw = std::str::from_utf8(raw).ok()?;
+    let id = if let Some(hex) = raw.strip_prefix("0x") {
+        u32::from_str_radix(hex, 16).ok()?
+    } else {
+        raw.parse().ok()?
+    };
+    (id != 0).then_some(id)
+}
+
+fn codex_clients() -> Vec<CodexClient> {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    let uid = my_uid();
+    entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let pid = entry.file_name().to_str()?.parse::<u32>().ok()?;
+            let proc = read_proc(pid, uid)?;
+            if proc.exe != "codex" {
+                return None;
+            }
+            let dir = entry.path();
+            // The server has /dev/null on stdin; background/non-interactive jobs
+            // cannot identify a terminal. No terminal data is opened or read.
+            let stdin = std::fs::read_link(dir.join("fd/0")).ok()?;
+            let tty = stdin.strip_prefix("/dev/pts").ok()?.to_str()?;
+            if tty.is_empty() || !tty.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            let exe = std::fs::read_link(dir.join("exe")).ok()?;
+            if exe.file_name()?.to_str()? != "codex" {
+                return None;
+            }
+            let args = std::fs::read(dir.join("cmdline")).ok()?;
+            if args.split(|b| *b == 0).any(|arg| arg == b"app-server") {
+                return None;
+            }
+            let cwd = std::fs::canonicalize(dir.join("cwd")).ok()?;
+            let window = std::fs::read(dir.join("environ"))
+                .ok()
+                .and_then(|env| window_id(&env));
+            Some(CodexClient { pid, cwd, window })
+        })
+        .collect()
+}
+
 /// Runs a helper with nothing attached and a time limit; true when it exits 0.
 fn run_quietly(cmd: &mut Command, limit: Duration) -> bool {
     let Ok(mut child) = cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() else {
@@ -185,12 +285,14 @@ mod x11 {
     use x11rb::protocol::xproto::{AtomEnum, ClientMessageEvent, ConnectionExt, EventMask, Window};
     use x11rb::rust_connection::RustConnection;
 
-    use crate::session_window;
-
     type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
     pub fn activate(ancestors: &[u32], folder: &str) -> bool {
-        try_activate(ancestors, folder).unwrap_or(false)
+        try_activate(ancestors, folder, None).unwrap_or(false)
+    }
+
+    pub fn activate_exact(ancestors: &[u32], window: u32) -> bool {
+        try_activate(ancestors, "", Some(window)).unwrap_or(false)
     }
 
     fn atom(conn: &RustConnection, name: &str) -> Fallible<u32> {
@@ -217,7 +319,7 @@ mod x11 {
             .unwrap_or_default()
     }
 
-    fn try_activate(ancestors: &[u32], folder: &str) -> Fallible<bool> {
+    fn try_activate(ancestors: &[u32], folder: &str, exact: Option<Window>) -> Fallible<bool> {
         let (conn, screen) = x11rb::connect(None)?;
         let root = conn.setup().roots.get(screen).ok_or("no screen")?.root;
         let client_list = atom(&conn, "_NET_CLIENT_LIST")?;
@@ -248,7 +350,7 @@ mod x11 {
                 windows.push((*window, pid, title(&conn, *window, net_wm_name, utf8)));
             }
         }
-        let Some(&target) = session_window::choose_window(ancestors, &windows, folder) else {
+        let Some(target) = super::choose_x11_window(ancestors, &windows, folder, exact) else {
             return Ok(false);
         };
 
@@ -264,6 +366,21 @@ mod x11 {
         conn.send_event(false, root, to_root, ev)?;
         conn.flush()?;
         Ok(true)
+    }
+}
+
+fn choose_x11_window(
+    ancestors: &[u32],
+    windows: &[(u32, u32, String)],
+    folder: &str,
+    exact: Option<u32>,
+) -> Option<u32> {
+    match exact {
+        Some(id) => windows
+            .iter()
+            .find(|(w, pid, _)| *w == id && ancestors.contains(pid))
+            .map(|(w, _, _)| *w),
+        None => session_window::choose_window(ancestors, windows, folder).copied(),
     }
 }
 
@@ -498,6 +615,84 @@ mod kitty {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detached_codex_requires_one_client_in_the_exact_directory() {
+        let clients = vec![
+            CodexClient {
+                pid: 10,
+                cwd: "/work/api".into(),
+                window: Some(101),
+            },
+            CodexClient {
+                pid: 20,
+                cwd: "/work/ui".into(),
+                window: Some(102),
+            },
+        ];
+        assert_eq!(
+            unique_client(&clients, Path::new("/work/api")).unwrap().pid,
+            10
+        );
+        assert!(unique_client(&clients, Path::new("/other/api")).is_none());
+        assert!(unique_client(&clients, Path::new("/work")).is_none());
+        let mut ambiguous = clients;
+        // A second client counts even without WINDOWID: ignoring it could raise
+        // the wrong terminal for the session we are trying to reach.
+        ambiguous.push(CodexClient {
+            pid: 30,
+            cwd: "/work/api".into(),
+            window: None,
+        });
+        assert!(unique_client(&ambiguous, Path::new("/work/api")).is_none());
+        assert!(unique_client(&[], Path::new("/work/api")).is_none());
+    }
+
+    #[test]
+    fn client_window_ids_are_parsed_without_shell_syntax() {
+        assert_eq!(
+            window_id(b"TERM=xterm-ghostty\0WINDOWID=50375213\0"),
+            Some(50375213)
+        );
+        assert_eq!(window_id(b"WINDOWID=0x300aa2d\0"), Some(50375213));
+        for env in [
+            b"WINDOWID=0\0".as_slice(),
+            b"XWINDOWID=123\0",
+            b"WINDOWID=$(bad)\0",
+            b"WINDOWID=-1\0",
+            b"WINDOWID=4294967296\0",
+            b"",
+        ] {
+            assert_eq!(window_id(env), None);
+        }
+    }
+
+    #[test]
+    fn exact_window_distinguishes_ghostty_windows_with_the_same_pid() {
+        let windows = vec![
+            (101, 50, "Other task".into()),
+            (102, 50, "Current task".into()),
+            (103, 99, "Unrelated".into()),
+        ];
+        assert_eq!(
+            choose_x11_window(&[40, 50], &windows, "", Some(102)),
+            Some(102)
+        );
+        assert_eq!(choose_x11_window(&[40, 50], &windows, "", Some(104)), None);
+        assert_eq!(choose_x11_window(&[40, 50], &windows, "", Some(103)), None);
+        assert_eq!(
+            choose_x11_window(&[40, 50], &windows, "Current", None),
+            Some(102)
+        );
+    }
+
+    /// Explicit local smoke test. Ordinary cargo test never touches a window.
+    #[test]
+    #[ignore]
+    fn local_codex_window_smoke() {
+        let cwd = std::env::var("COUCOU_TEST_CWD").unwrap();
+        assert!(focus_codex_terminal(Some(&cwd)));
+    }
 
     #[test]
     fn the_best_way_comes_first_for_each_desktop() {

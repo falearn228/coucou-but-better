@@ -168,7 +168,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
 
 // ── Overview ──────────────────────────────────────────────────────────────────
 
-function buildOverview(actions: ViewActions): ViewHost {
+export function buildOverview(actions: ViewActions): ViewHost {
   /** The diff open in the left card (a FileDiff id), as activeDiffId on macOS. */
   let activeDiffId: number | null = null;
   const closeDiff = () => {
@@ -425,7 +425,7 @@ export function hasSessionTicker(task: AgentTask): boolean {
 }
 
 function buildPill(task: AgentTask, actions: ViewActions): HTMLElement {
-  const label = task.id === "integration_claude" ? "VS Code" : task.name;
+  const label = task.id === "integration_claude" ? pillDefinition(task.id)?.name ?? task.name : task.name;
   const canvas = createMiniBot(task, 24);
   const pill = h(
     "div",
@@ -434,6 +434,13 @@ function buildPill(task: AgentTask, actions: ViewActions): HTMLElement {
     h("span", { class: "lbl", text: label }),
   );
   pill.style.borderColor = `${task.color}24`;
+  pill.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    State.wardrobeTargetId = task.id;
+    State.wardrobePreview = null;
+    actions.setView("wardrobe");
+  });
   pill.addEventListener("mouseenter", () => {
     pill.style.background = `${task.color}2e`;
     pill.style.borderColor = `${task.color}8c`;
